@@ -26,8 +26,15 @@ class DatasetCreator:
         self.labels_path = os.path.join(
             self.raw_data_path, 'labels')  # Raw labels
 
+        self.class_mapping = {"number": 0,
+                              "date": 1,
+                              "sender": 2,
+                              "table": 3,
+                              "appendix": 4}
+
         self.yolo_obb_creator = YoloOBBCreator(raw_data_path=raw_data_path,
-                                               json_min_path=self.json_min_path)
+                                               json_min_path=self.json_min_path,
+                                               class_mapping=self.class_mapping)
 
         self.__train_folder = None
         self.__val_folder = None
@@ -104,6 +111,7 @@ class DatasetCreator:
         with open(self.classes_path, 'r') as classes_file:
             # Set the names of the classes
             classes = [i.split('\n')[0] for i in classes_file.readlines()]
+            classes = sorted(classes, key=lambda x: self.class_mapping[x])
 
         return classes
 
@@ -114,27 +122,17 @@ class DatasetCreator:
 
         # Write the data.yaml file
         with open(self.data_yaml_path, 'w') as yaml_file:
-            yaml_file.write('names:' + '\n')
-            for class_name in classes:
-                yaml_file.write(f"- {class_name}\n")
-
-            yaml_file.write('nc: ' + str(len(classes)) + '\n')
 
             yaml_file.write('train: ' + self.train_folder + '\n')
             yaml_file.write('val: ' + self.val_folder + '\n')
             yaml_file.write('test: ' + self.test_folder + '\n')
 
-    def copy_files_from_dict(self,
-                             image_name,
-                             label_name,
-                             copy_to):
+            yaml_file.write('nc: ' + str(len(classes)) + '\n')
 
-        shutil.copyfile(os.path.join(self.images_path, image_name),
-                        os.path.join(copy_to, image_name))
-
-        if label_name is not None:
-            shutil.copyfile(os.path.join(self.labels_path, label_name),
-                            os.path.join(copy_to, label_name))
+            yaml_file.write('names:' + '\n')
+            for class_name in classes:
+                yaml_file.write(
+                    f"  {self.class_mapping.get(class_name, -1)}: {class_name}\n")
 
     def transform_and_save_image(self,
                                  image_name,
@@ -148,11 +146,6 @@ class DatasetCreator:
         image.save(full_image_output_path, 'JPEG')
         image.close()
 
-    def transform_and_save_label(self,
-                                 label_name,
-                                 copy_to):
-        pass
-
     def transform_and_save_files_from_dict(self,
                                            image_name,
                                            label_name,
@@ -161,7 +154,8 @@ class DatasetCreator:
         self.transform_and_save_image(image_name, copy_to)
 
         if label_name is not None:
-            self.transform_and_save_label(label_name, copy_to)
+            shutil.copyfile(os.path.join(self.labels_path, label_name),
+                            os.path.join(copy_to, label_name))
 
     def partitionate_data(self):
         # Dict with images and labels
@@ -180,19 +174,19 @@ class DatasetCreator:
 
         # Copy the images and labels to the train, validation, and test folders
         for image_name, label_name in train_data.items():
-            self.copy_files_from_dict(image_name=image_name,
-                                      label_name=label_name,
-                                      copy_to=self.train_folder)
+            self.transform_and_save_files_from_dict(image_name=image_name,
+                                                    label_name=label_name,
+                                                    copy_to=self.train_folder)
 
         for image_name, label_name in val_data.items():
-            self.copy_files_from_dict(image_name=image_name,
-                                      label_name=label_name,
-                                      copy_to=self.val_folder)
+            self.transform_and_save_files_from_dict(image_name=image_name,
+                                                    label_name=label_name,
+                                                    copy_to=self.val_folder)
 
         for image_name, label_name in test_data.items():
-            self.copy_files_from_dict(image_name=image_name,
-                                      label_name=label_name,
-                                      copy_to=self.test_folder)
+            self.transform_and_save_files_from_dict(image_name=image_name,
+                                                    label_name=label_name,
+                                                    copy_to=self.test_folder)
 
     def process(self):
         # Creating labels from json
@@ -209,7 +203,8 @@ class DatasetCreator:
 class YoloOBBCreator():
     def __init__(self,
                  raw_data_path,
-                 json_min_path):
+                 json_min_path,
+                 class_mapping):
 
         self.raw_data_path = raw_data_path
         self.labels_path = os.path.join(raw_data_path, 'labels')
@@ -217,11 +212,7 @@ class YoloOBBCreator():
 
         self.json_min_path = json_min_path
 
-        self.class_mapping = {"number": 0,
-                              "date": 1,
-                              "sender": 2,
-                              "table": 3,
-                              "appendix": 4}
+        self.class_mapping = class_mapping
 
     def create_yolo_bboxes(self):
         '''
