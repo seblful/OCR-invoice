@@ -1,6 +1,10 @@
 import os
+import json
 import shutil
 import random
+import math
+
+from PIL import Image
 
 
 class DatasetCreator:
@@ -12,36 +16,28 @@ class DatasetCreator:
         self.raw_data_path = raw_data_path
         self.dataset_path = dataset_path
 
-        self.__images_path = None  # Raw images
-        self.__labels_path = None  # Raw labels
+        self.classes_path = os.path.join(self.raw_data_path, 'classes.txt')
+        self.json_min_path = os.path.join(self.raw_data_path, 'labels.json')
+
+        self.data_yaml_path = os.path.join(self.dataset_path, 'data.yaml')
+
+        self.images_path = os.path.join(
+            self.raw_data_path, 'images')  # Raw images
+        self.labels_path = os.path.join(
+            self.raw_data_path, 'labels')  # Raw labels
+
+        self.yolo_obb_creator = YoloOBBCreator(raw_data_path=raw_data_path,
+                                               json_min_path=self.json_min_path)
 
         self.__train_folder = None
         self.__val_folder = None
         self.__test_folder = None
 
         self.__images_labels_dict = None
-        self.__classes_path = None
-        self.__data_yaml_path = None
 
         self.train_split = train_split
         self.val_split = 0.6 * (1 - self.train_split)
         self.test_split = 1 - self.train_split - self.val_split
-
-    @property
-    def images_path(self):
-        if self.__images_path is None:
-            self.__images_path = os.path.join(
-                self.raw_data_path, 'images')
-
-        return self.__images_path
-
-    @property
-    def labels_path(self):
-        if self.__labels_path is None:
-            self.__labels_path = os.path.join(
-                self.raw_data_path, 'labels')
-
-        return self.__labels_path
 
     @property
     def train_folder(self):
@@ -74,22 +70,6 @@ class DatasetCreator:
         return self.__test_folder
 
     @property
-    def data_yaml_path(self):
-        if self.__data_yaml_path is None:
-            self.__data_yaml_path = os.path.join(
-                self.dataset_path, 'data.yaml')
-
-        return self.__data_yaml_path
-
-    @property
-    def classes_path(self):
-        if self.__classes_path is None:
-            self.__classes_path = os.path.join(
-                self.raw_data_path, 'classes.txt')
-
-        return self.__classes_path
-
-    @property
     def images_labels_dict(self):
         '''
         Dict with names of images with corresponding 
@@ -120,9 +100,8 @@ class DatasetCreator:
 
         return images_labels
 
-    @staticmethod
-    def read_classes_file(classes_path):
-        with open(classes_path, 'r') as classes_file:
+    def read_classes_file(self):
+        with open(self.classes_path, 'r') as classes_file:
             # Set the names of the classes
             classes = [i.split('\n')[0] for i in classes_file.readlines()]
 
@@ -130,8 +109,7 @@ class DatasetCreator:
 
     def write_data_yaml(self):
         # Read classes file
-        classes = DatasetCreator.read_classes_file(
-            classes_path=self.classes_path)
+        classes = self.read_classes_file()
         print(f"Available classes is {classes}")
 
         # Write the data.yaml file
@@ -146,19 +124,44 @@ class DatasetCreator:
             yaml_file.write('val: ' + self.val_folder + '\n')
             yaml_file.write('test: ' + self.test_folder + '\n')
 
-    @staticmethod
-    def copy_files_from_dict(key,
-                             value,
-                             images_path,
-                             labels_path,
+    def copy_files_from_dict(self,
+                             image_name,
+                             label_name,
                              copy_to):
 
-        shutil.copyfile(os.path.join(images_path, key),
-                        os.path.join(copy_to, key))
+        shutil.copyfile(os.path.join(self.images_path, image_name),
+                        os.path.join(copy_to, image_name))
 
-        if value is not None:
-            shutil.copyfile(os.path.join(labels_path, value),
-                            os.path.join(copy_to, value))
+        if label_name is not None:
+            shutil.copyfile(os.path.join(self.labels_path, label_name),
+                            os.path.join(copy_to, label_name))
+
+    def transform_and_save_image(self,
+                                 image_name,
+                                 copy_to):
+        full_image_input_path = os.path.join(self.images_path, image_name)
+        new_image_name = os.path.splitext(image_name)[0] + '.jpg'
+        full_image_output_path = os.path.join(copy_to, new_image_name)
+
+        image = Image.open(full_image_input_path)
+        image = image.convert("RGB")
+        image.save(full_image_output_path, 'JPEG')
+        image.close()
+
+    def transform_and_save_label(self,
+                                 label_name,
+                                 copy_to):
+        pass
+
+    def transform_and_save_files_from_dict(self,
+                                           image_name,
+                                           label_name,
+                                           copy_to):
+
+        self.transform_and_save_image(image_name, copy_to)
+
+        if label_name is not None:
+            self.transform_and_save_label(label_name, copy_to)
 
     def partitionate_data(self):
         # Dict with images and labels
@@ -176,31 +179,114 @@ class DatasetCreator:
             data.keys())[num_train+num_val:num_train+num_val+num_test]}
 
         # Copy the images and labels to the train, validation, and test folders
-        for key, value in train_data.items():
-            DatasetCreator.copy_files_from_dict(key=key,
-                                                value=value,
-                                                images_path=self.images_path,
-                                                labels_path=self.labels_path,
-                                                copy_to=self.train_folder)
+        for image_name, label_name in train_data.items():
+            self.copy_files_from_dict(image_name=image_name,
+                                      label_name=label_name,
+                                      copy_to=self.train_folder)
 
-        for key, value in val_data.items():
-            DatasetCreator.copy_files_from_dict(key=key,
-                                                value=value,
-                                                images_path=self.images_path,
-                                                labels_path=self.labels_path,
-                                                copy_to=self.val_folder)
+        for image_name, label_name in val_data.items():
+            self.copy_files_from_dict(image_name=image_name,
+                                      label_name=label_name,
+                                      copy_to=self.val_folder)
 
-        for key, value in test_data.items():
-            DatasetCreator.copy_files_from_dict(key=key,
-                                                value=value,
-                                                images_path=self.images_path,
-                                                labels_path=self.labels_path,
-                                                copy_to=self.test_folder)
+        for image_name, label_name in test_data.items():
+            self.copy_files_from_dict(image_name=image_name,
+                                      label_name=label_name,
+                                      copy_to=self.test_folder)
 
     def process(self):
+        # Creating labels from json
+        print("Labels in obb format are creating...")
+        self.yolo_obb_creator.create_yolo_bboxes()
         # Create train, valid, test datasets
         print("Dataset is creating...")
         self.partitionate_data()
-        print("Train, validation, test dataset has created.")
+        print("Train, validation, test datasets have created.")
         self.write_data_yaml()
         print("data.yaml file has created.")
+
+
+class YoloOBBCreator():
+    def __init__(self,
+                 raw_data_path,
+                 json_min_path):
+
+        self.raw_data_path = raw_data_path
+        self.labels_path = os.path.join(raw_data_path, 'labels')
+        os.makedirs(self.labels_path, exist_ok=True)
+
+        self.json_min_path = json_min_path
+
+        self.class_mapping = {"number": 0,
+                              "date": 1,
+                              "sender": 2,
+                              "table": 3,
+                              "appendix": 4}
+
+    def create_yolo_bboxes(self):
+        '''
+        Opens json file with annotation, takes labels, 
+        format it to obb format and writes it to txt file
+        '''
+        # Open json file
+        with open(self.json_min_path, 'r') as json_file:
+            data = json.load(json_file)
+
+        # Iterating through annotations
+        for item in data:
+            image_path = item["image"]
+            image_name = os.path.splitext(os.path.basename(image_path))[0]
+            txt_filename = os.path.join(self.labels_path, image_name + ".txt")
+
+            # Iterating through labeks in one annotation
+            with open(txt_filename, 'w') as txt_file:
+                for label in item['label']:
+                    class_label = label['rectanglelabels'][0]
+                    class_index = self.class_mapping.get(class_label, -1)
+                    if class_index == -1:
+                        print(
+                            f"There is no class label '{class_label}', change class mapping.")
+                        continue
+
+                    # Get points in obb format
+                    points = self.get_rotated_rectangle(label['x'],
+                                                        label['y'],
+                                                        label['width'],
+                                                        label['height'],
+                                                        label['rotation'],
+                                                        label['original_width'],
+                                                        label['original_height'])
+
+                    # Write labels in obb format to txt file
+                    txt_file.write(f"{class_index} " + " ".join(
+                        f"{coord[0]:.6f} {coord[1]:.6f}" for coord in points) + "\n")
+
+    def get_rotated_rectangle(self,
+                              x,
+                              y,
+                              w,
+                              h,
+                              theta,
+                              original_width,
+                              original_height):
+        x1 = x / 100
+        y1 = y / 100
+
+        w = w * original_width
+        h = h * original_height
+
+        x2 = (x * original_width + w * math.cos(math.radians(theta))) / \
+            original_width / 100
+        y2 = (y * original_height + w * math.sin(math.radians(theta))) / \
+            original_height / 100
+        x3 = (x * original_width + w * math.cos(math.radians(theta)) - h * math.sin(
+            math.radians(theta))) / original_width / 100
+        y3 = (y * original_height + w * math.sin(math.radians(theta)) + h * math.cos(
+            math.radians(theta))) / original_height / 100
+
+        x4 = (x * original_width - h * math.sin(math.radians(theta))) / \
+            original_width / 100
+        y4 = (y * original_height + h * math.cos(math.radians(theta))) / \
+            original_height / 100
+
+        return [(x1, y1), (x2, y2), (x3, y3), (x4, y4)]
