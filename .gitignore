@@ -1,5 +1,8 @@
 key-detection/import-data
 key-detection/raw-data
 key-detection/dataset
+key-detection/runs
+
+key-detection/yolov8*-obb.pt
 
 __pycache__
