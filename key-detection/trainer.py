@@ -1,5 +1,6 @@
-import ultralytics
+import os
 import torch
+import ultralytics
 
 
 class Trainer():
@@ -22,7 +23,7 @@ class Trainer():
 
         self.model_yaml = f"yolov8{model_type}-obb.yaml"
         self.model_type = f"yolov8{model_type}-obb.pt"
-        self._data = None
+        self.data_yaml = os.path.join(self.dataset_path, 'data.yaml')
 
         self._model = None
         self.is_trained = False
@@ -42,20 +43,16 @@ class Trainer():
 
         return self._model
 
-    @property
-    def data(self):
-        if self._data is None:
-            self._data = self.dataset_path + '/data.yaml'
-
-        return self._data
-
     def train(self):
         '''
         Training model
         '''
-
-        result = self.model.train(data=self.data, epochs=self.num_epochs, imgsz=self.image_size,
-                                  batch=self.batch_size, seed=self.seed)  # , close_mosaic=0, resume="runs/detect/train/weights/yolov8n.pt", workers=1 maybe
+        result = self.model.train(data=self.data_yaml,
+                                  epochs=self.num_epochs,
+                                  imgsz=self.image_size,
+                                  batch=self.batch_size,
+                                  seed=self.seed,
+                                  close_mosaic=0)  # , workers=1 maybe
         self.is_trained = True
 
         return result
@@ -67,7 +64,7 @@ class Trainer():
 
         if self.is_trained == True:
             metrics = self.model.val(
-                data=self.data, imgsz=self.image_size, split='test')
+                data=self.data_yaml, imgsz=self.image_size, split='test')
 
             return metrics
 
