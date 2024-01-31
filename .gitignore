@@ -2,7 +2,9 @@ key-detection/import-data
 key-detection/raw-data
 key-detection/dataset
 key-detection/runs
+key-detection/model-garden
 
 key-detection/yolov8*-obb.pt
+key-detection/yolov8*.pt
 
 __pycache__
