@@ -21,7 +21,7 @@ def create_yolo_bboxes(json_min,
     # Iterating through annotations
     for item in data:
         image_path = item["image"]
-        image_name = os.path.basename(image_path)
+        image_name = os.path.splitext(os.path.basename(image_path))[0]
         txt_filename = f'{output_dir}/{image_name}.txt'
 
         # Iterating through labeks in one annotation
@@ -72,15 +72,6 @@ def get_rotated_rectangle(x, y, w, h, theta, original_width, original_height):
     return [(x1, y1), (x2, y2), (x3, y3), (x4, y4)]
 
 
-json_file_path = 'key-detection/raw-data/project-3-at-2024-01-30-15-48-07ee277a.json'
-output_dir = 'key-detection/raw-data/labels'
-class_mapping = {"number": 0,
-                 "date": 1,
-                 "sender": 2,
-                 "table": 3,
-                 "appendix": 4}
-
-
 def read_yolo_obb(obb_label_path):
     with open(obb_label_path, 'r') as f:
         lines = f.readlines()
@@ -122,6 +113,15 @@ def visualize_labels(raw_data_dir):
 
 # visualize_labels(raw_data_dir="key-detection/raw-data")
 
-# create_yolo_bboxes(json_min=json_file_path,
-#                    output_dir=output_dir,
-#                    class_mapping=class_mapping)
+
+json_file_path = 'key-detection/raw-data/labels.json'
+output_dir = 'key-detection/raw-data/labels'
+class_mapping = {"number": 0,
+                 "date": 1,
+                 "sender": 2,
+                 "table": 3,
+                 "appendix": 4}
+
+create_yolo_bboxes(json_min=json_file_path,
+                   output_dir=output_dir,
+                   class_mapping=class_mapping)
