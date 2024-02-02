@@ -1,12 +1,13 @@
 import os
 import json
+from PIL import Image
 import cv2
 import math
 import numpy as np
 import torch
 
 
-def extract_xyxyxyxy_bboxes(json_min_path):
+def extract_obb_bboxes(json_min_path):
     '''
     Opens json file with annotation, takes labels, 
     format it to obb format and writes it to txt file
@@ -49,57 +50,23 @@ def get_rotated_rectangle(x,
                           theta,
                           original_width,
                           original_height):
-    x1 = x / 100
-    y1 = y / 100
+    x1 = x * original_width / 100
+    y1 = y * original_height / 100
 
     w = w * original_width
     h = h * original_height
 
-    x2 = (x * original_width + w * math.cos(math.radians(theta))) / \
-        original_width / 100
-    y2 = (y * original_height + w * math.sin(math.radians(theta))) / \
-        original_height / 100
+    x2 = (x * original_width + w * math.cos(math.radians(theta))) / 100
+    y2 = (y * original_height + w * math.sin(math.radians(theta))) / 100
     x3 = (x * original_width + w * math.cos(math.radians(theta)) - h * math.sin(
-        math.radians(theta))) / original_width / 100
+        math.radians(theta))) / 100
     y3 = (y * original_height + w * math.sin(math.radians(theta)) + h * math.cos(
-        math.radians(theta))) / original_height / 100
+        math.radians(theta))) / 100
 
-    x4 = (x * original_width - h * math.sin(math.radians(theta))) / \
-        original_width / 100
-    y4 = (y * original_height + h * math.cos(math.radians(theta))) / \
-        original_height / 100
+    x4 = (x * original_width - h * math.sin(math.radians(theta))) / 100
+    y4 = (y * original_height + h * math.cos(math.radians(theta))) / 100
 
-    return [(x1, y1), (x2, y2), (x3, y3), (x4, y4)]
-
-
-def xywhr2xyxyxyxy(rboxes):
-    """
-    Convert batched Oriented Bounding Boxes (OBB) from [xywh, rotation] to [xy1, xy2, xy3, xy4]. Rotation values should
-    be in degrees from 0 to 90.
-
-    Args:
-        rboxes (numpy.ndarray | torch.Tensor): Input data in [cx, cy, w, h, rotation] format of shape (n, 5) or (b, n, 5).
-
-    Returns:
-        (numpy.ndarray | torch.Tensor): Converted corner points of shape (n, 4, 2) or (b, n, 4, 2).
-    """
-    is_numpy = isinstance(rboxes, np.ndarray)
-    cos, sin = (np.cos, np.sin) if is_numpy else (torch.cos, torch.sin)
-
-    ctr = rboxes[..., :2]
-    w, h, angle = (rboxes[..., i: i + 1] for i in range(2, 5))
-    cos_value, sin_value = cos(angle), sin(angle)
-    vec1 = [w / 2 * cos_value, w / 2 * sin_value]
-    vec2 = [-h / 2 * sin_value, h / 2 * cos_value]
-    vec1 = np.concatenate(
-        vec1, axis=-1) if is_numpy else torch.cat(vec1, dim=-1)
-    vec2 = np.concatenate(
-        vec2, axis=-1) if is_numpy else torch.cat(vec2, dim=-1)
-    pt1 = ctr + vec1 + vec2
-    pt2 = ctr + vec1 - vec2
-    pt3 = ctr - vec1 - vec2
-    pt4 = ctr - vec1 + vec2
-    return np.stack([pt1, pt2, pt3, pt4], axis=-2) if is_numpy else torch.stack([pt1, pt2, pt3, pt4], dim=-2)
+    return np.array([(x1, y1), (x2, y2), (x3, y3), (x4, y4)], dtype=np.float32)
 
 
 def crop_obb(image, points):
@@ -131,18 +98,29 @@ def crop_obb(image, points):
 
 
 def extract_tables(images_dir,
-                   labels_json):
-    labels_dict = extract_xyxyxyxy_bboxes(labels_json)
+                   labels_json,
+                   output_dir):
+    labels_dict = extract_obb_bboxes(labels_json)
+    # print(labels_dict["2a39feb6-Document_55.jpg"])
 
     for image_name in os.listdir(images_dir):
         full_image_path = os.path.join(images_dir, image_name)
+        image_array = np.array(Image.open(full_image_path))
+        cropped_table = crop_obb(image=image_array,
+                                 points=labels_dict[image_name])
+        output_image_path = os.path.join(
+            output_dir, os.path.splitext(image_name)[0] + "_cropped.jpg")
+
+        cv2.imwrite(output_image_path, cropped_table)
 
 
 HOME = os.getcwd()
 key_raw_data = os.path.join(HOME, "key-raw-data")
 images_dir = os.path.join(key_raw_data, "images")
 labels_json_path = os.path.join(key_raw_data, "labels.json")
+output_dir = os.path.join(HOME, "import-data")
 
 
 extract_tables(images_dir,
-               labels_json_path)
+               labels_json_path,
+               output_dir)
