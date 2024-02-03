@@ -4,14 +4,18 @@ key-detection/dataset
 key-detection/runs
 key-detection/model-garden
 
-key-detection/yolov8*-obb.pt
-key-detection/yolov8*.pt
+yolov8*-obb.pt
+yolov8*.pt
 
 table-recognition/key-raw-data
 table-recognition/raw-data
 table-recognition/import-data
 table-recognition/dataset
 table-recognition/model-garden
+
+process/images
+process/best.pt
+process/output.csv
 
 
 __pycache__
